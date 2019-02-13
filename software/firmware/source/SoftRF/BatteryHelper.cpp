@@ -1,6 +1,6 @@
 /*
  * BatteryHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,4 +29,11 @@ void Battery_setup()
 float Battery_voltage()
 {
   return SoC->Battery_voltage();
+}
+
+/* low battery voltage threshold */
+float Battery_threshold()
+{
+  return hw_info.model == SOFTRF_MODEL_PRIME_MK2 ?
+                          BATTERY_THRESHOLD_LIPO : BATTERY_THRESHOLD_NIMHX2;
 }

@@ -1,7 +1,7 @@
 /*
  * Protocol_Legacy.h
  * Copyright (C) 2014-2015 Stanislaw Pusep
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,12 +37,15 @@
 #define LEGACY_KEY2 0x045d9f3b
 #define LEGACY_KEY3 0x87b562f4
 
+/* FTD-12 Version: 7.00 */
 enum
 {
 	ADDR_TYPE_RANDOM,
 	ADDR_TYPE_ICAO,
 	ADDR_TYPE_FLARM,
-	ADDR_TYPE_OGN
+	ADDR_TYPE_ANONYMOUS, /* FLARM stealth, OGN */
+	ADDR_TYPE_P3I,
+	ADDR_TYPE_FANET
 };
 
 enum
@@ -110,7 +113,8 @@ typedef struct {
     // unsigned int magic:8;
     /********************/
     int vs:10;
-    unsigned int _unk2:3;
+    unsigned int _unk2:2;
+    unsigned int airborne:1;
     unsigned int stealth:1;
     unsigned int no_track:1;
     unsigned int _unk3:1;
@@ -122,14 +126,12 @@ typedef struct {
     /********************/
     unsigned int lon:20;
     unsigned int _unk4:10;
-    unsigned int vsmult:2;
+    unsigned int smult:2;
     /********************/
     int8_t ns[4];
     int8_t ew[4];
     /********************/
 } legacy_packet_t;
-
-//#define MYADDR  Device_Id
 
 bool legacy_decode(void *, ufo_t *, ufo_t *);
 size_t legacy_encode(void *, ufo_t *);

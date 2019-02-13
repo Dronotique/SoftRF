@@ -1,6 +1,6 @@
 /*
  * GNSSHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,7 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#if defined(ARDUINO)
 #include <Arduino.h>
+#endif
 #include <TimeLib.h>
 
 #include "GNSSHelper.h"
@@ -460,7 +462,8 @@ byte GNSS_setup() {
 
   rval = GNSS_MODULE_NMEA;
 
-  if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
+  if (hw_info.model == SOFTRF_MODEL_PRIME_MK2 ||
+      hw_info.model == SOFTRF_MODEL_RASPBERRY ) {
 
     rval = GNSS_version();
 
@@ -572,33 +575,6 @@ void PickGNSSFix()
 
           }
 #endif
-
-          /* try to append pressure altitude (PGRMZ) next to each RMC sentence */
-          if (ThisAircraft.pressure_altitude != 0.0 &&
-              !strncmp((char *) &GNSSbuf[ndx+3], "RMC,", strlen("RMC,")) &&
-              /* Assume that space of 24 bytes is sufficient for PGRMZ */
-              (sizeof(GNSSbuf) - GNSS_cnt > 24) ) {
-
-            int altitude = constrain(
-                    (int) (ThisAircraft.pressure_altitude * _GPS_FEET_PER_METER),
-                    -1000, 60000);
-
-            snprintf((char *) &GNSSbuf[GNSS_cnt+1], 24, "\n$PGRMZ,%d,f,3*",
-                    altitude ); /* feet , 3D fix */
-
-            size_t sentence_size = strlen((char *) &GNSSbuf[GNSS_cnt+1]);
-
-            //calculate the checksum
-            unsigned char cs = 0;
-            for (unsigned int n = 2; n < sentence_size - 1; n++) {
-              cs ^= GNSSbuf[(GNSS_cnt+1) + n];
-            }
-
-            char *csum_ptr = (char *) GNSSbuf + ((GNSS_cnt+1) + sentence_size);
-            snprintf(csum_ptr, 8, "%02X\r", cs);
-
-            write_size += sentence_size + strlen(csum_ptr);
-          }
 
           /*
            * Work around issue with "always 0.0,M" GGA geoid separation value

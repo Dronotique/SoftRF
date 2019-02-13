@@ -1,6 +1,6 @@
 /*
  * EEPROMHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include "NMEAHelper.h"
 #include "GDL90Helper.h"
 #include "D1090Helper.h"
+#include "JSONHelper.h"
 
 // start reading from the first byte (address 0) of the EEPROM
 
@@ -80,9 +81,11 @@ void EEPROM_defaults()
   eeprom_block.field.settings.nmea_g   = true;
   eeprom_block.field.settings.nmea_p   = false;
   eeprom_block.field.settings.nmea_l   = true;
+  eeprom_block.field.settings.nmea_s   = true;
   eeprom_block.field.settings.nmea_out = NMEA_UART;
   eeprom_block.field.settings.gdl90    = GDL90_OFF;
   eeprom_block.field.settings.d1090    = D1090_OFF;
+  eeprom_block.field.settings.json     = JSON_OFF;
   eeprom_block.field.settings.stealth  = false;
   eeprom_block.field.settings.no_track = false;
 }

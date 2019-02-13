@@ -7,7 +7,7 @@
  *    Development -  https://github.com/3s1d/fanet-stm32
  *    Deprecated  -  https://github.com/3s1d/fanet
  *
- * Copyright (C) 2017-2018 Linar Yusupov
+ * Copyright (C) 2017-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,9 +30,11 @@
 
 #include "SoftRF.h"
 #include "Protocol_FANET.h"
+#include "Protocol_Legacy.h"
 #include "RFHelper.h"
 
 const rf_proto_desc_t fanet_proto_desc = {
+  "FANET",
   .type             = RF_PROTOCOL_FANET,
   .modulation_type  = RF_MODULATION_TYPE_LORA,
   .preamble_type    = 0 /* INVALID FOR LORA */,
@@ -245,7 +247,7 @@ bool fanet_decode(void *fanet_pkt, ufo_t *this_aircraft, ufo_t *fop) {
     }
     fop->vs = ((float)climb_int) * (_GPS_FEET_PER_METER * 6.0);
 
-    fop->addr_type = 0;
+    fop->addr_type = ADDR_TYPE_FANET;
     fop->timestamp = this_aircraft->timestamp;
 
     fop->stealth = 0;

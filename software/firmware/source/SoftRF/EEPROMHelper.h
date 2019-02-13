@@ -1,6 +1,6 @@
 /*
  * EEPROMHelper.h
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,9 @@
 #ifndef EEPROMHELPER_H
 #define EEPROMHELPER_H
 
+#if defined(ARDUINO) && !defined(ENERGIA_ARCH_CC13XX)
 #include <EEPROM.h>
+#endif /* ARDUINO */
 
 #include "SoftRF.h"
 
@@ -39,8 +41,8 @@ typedef struct Settings {
     bool     nmea_g:1;
     bool     nmea_p:1;
     bool     nmea_l:1;
+    bool     nmea_s:1;
     bool     resvd1:1;
-    bool     resvd2:1;
     uint8_t  nmea_out:3;
 
     uint8_t  bluetooth:3; /* ESP32 built-in Bluetooth */
@@ -50,9 +52,9 @@ typedef struct Settings {
 
     uint8_t  gdl90:3;
     uint8_t  d1090:3;
-    uint8_t  resvd3:2;
+    uint8_t  json:2;
 
-    uint8_t  resvd4;
+    uint8_t  resvd234;
     uint8_t  resvd5;
     uint8_t  resvd6;
     uint8_t  resvd7;

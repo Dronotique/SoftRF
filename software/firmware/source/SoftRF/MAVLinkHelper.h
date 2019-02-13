@@ -1,6 +1,6 @@
 /*
  * MAVLinkHelper.h
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,9 @@
 #ifndef MAVLINKHELPER_H
 #define MAVLINKHELPER_H
 
+#if defined(ARDUINO)
 #include <Arduino.h>  // uint32_t definition is required for mavlink.h
+#endif /* ARDUINO */
 
 #define MAVLINK10
 
@@ -28,7 +30,7 @@
 
 #include "SoftRF.h"
 
-#define MAVisValidFix() (the_aircraft.gps.fix_type == 3 /* 3D fix */ )
+#define isValidMAVFix() (the_aircraft.gps.fix_type == 3 /* 3D fix */ )
 
 void MAVLink_setup();
 void PickMAVLinkFix();

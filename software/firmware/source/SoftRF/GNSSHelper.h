@@ -1,6 +1,6 @@
 /*
  * GNSSHelper.h
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,12 +40,12 @@ enum
  * Valid date is critical for legacy protocol (only).
  */
 #define NMEA_EXP_TIME  3500 /* 3.5 seconds */
-#define isValidFix() ( gnss.location.isValid()               && \
-                       gnss.altitude.isValid()               && \
-                       gnss.date.isValid()                   && \
-                      (gnss.location.age() <= NMEA_EXP_TIME) && \
-                      (gnss.altitude.age() <= NMEA_EXP_TIME) && \
-                      (gnss.date.age()     <= NMEA_EXP_TIME))
+#define isValidGNSSFix()  ( gnss.location.isValid()               && \
+                            gnss.altitude.isValid()               && \
+                            gnss.date.isValid()                   && \
+                           (gnss.location.age() <= NMEA_EXP_TIME) && \
+                           (gnss.altitude.age() <= NMEA_EXP_TIME) && \
+                           (gnss.date.age()     <= NMEA_EXP_TIME))
 
 byte GNSS_setup();
 

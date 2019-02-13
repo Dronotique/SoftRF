@@ -1,6 +1,6 @@
 /*
  * WebHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,10 @@
 #include "GDL90Helper.h"
 #include "D1090Helper.h"
 
+#if defined(ENABLE_AHRS)
+#include "AHRSHelper.h"
+#endif /* ENABLE_AHRS */
+
 static uint32_t prev_rx_pkt_cnt = 0;
 
 static const char Logo[] PROGMEM = {
@@ -47,6 +51,7 @@ byte getVal(char c)
      return (byte)(toupper(c)-'A'+10);
 }
 
+#if DEBUG
 void Hex2Bin(String str, byte *buffer)
 {
   char hexdata[2 * PKT_SIZE + 1];
@@ -57,20 +62,61 @@ void Hex2Bin(String str, byte *buffer)
     buffer[j>>1] = getVal(hexdata[j+1]) + (getVal(hexdata[j]) << 4);
   }
 }
+#endif
 
-String Bin2Hex(byte *buffer)
-{
-  String str = "";
-  for (int i=0; i < PKT_SIZE; i++) {
-    byte c = buffer[i];
-    str += (c < 0x10 ? "0" : "") + String(c, HEX);
-  }
-  return str;
-}
+static const char about_html[] PROGMEM = "<html>\
+  <head>\
+    <meta name='viewport' content='width=device-width, initial-scale=1'>\
+    <title>About</title>\
+  </head>\
+<body>\
+<h1 align=center>About</h1>\
+<p>This firmware is a part of open SoftRF project</p>\
+<p>URL: http://github.com/lyusupov/SoftRF</p>\
+<p>Author: <b>Linar Yusupov</b></p>\
+<p>E-mail: linar.r.yusupov@gmail.com</p>\
+<h2 align=center>Credits</h2>\
+<p align=center>(in historical order)</p>\
+<table width=100%%>\
+<tr><th align=left>Ivan Grokhotkov</th><td align=left>Arduino core for ESP8266</td></tr>\
+<tr><th align=left>Zak Kemble</th><td align=left>nRF905 library</td></tr>\
+<tr><th align=left>Stanislaw Pusep</th><td align=left>flarm_decode</td></tr>\
+<tr><th align=left>Paul Stoffregen</th><td align=left>Arduino Time Library</td></tr>\
+<tr><th align=left>Mikal Hart</th><td align=left>TinyGPS++ and PString Libraries</td></tr>\
+<tr><th align=left>Phil Burgess</th><td align=left>Adafruit NeoPixel Library</td></tr>\
+<tr><th align=left>Andy Little</th><td align=left>Aircraft and MAVLink Libraries</td></tr>\
+<tr><th align=left>Peter Knight</th><td align=left>TrueRandom Library</td></tr>\
+<tr><th align=left>Matthijs Kooijman</th><td align=left>IBM LMIC framework for Arduino</td></tr>\
+<tr><th align=left>David Paiva</th><td align=left>ESP8266FtpServer</td></tr>\
+<tr><th align=left>Lammert Bies</th><td align=left>Lib_crc</td></tr>\
+<tr><th align=left>Pawel Jalocha</th><td align=left>OGN library</td></tr>\
+<tr><th align=left>Timur Sinitsyn, Tobias Simon, Ferry Huberts</th><td align=left>NMEA library</td></tr>\
+<tr><th align=left>yangbinbin (yangbinbin_ytu@163.com)</th><td align=left>ADS-B encoder C++ library</td></tr>\
+<tr><th align=left>Hristo Gochkov</th><td align=left>Arduino core for ESP32</td></tr>\
+<tr><th align=left>Limor Fried and Ladyada</th><td align=left>Adafruit BMP085 library</td></tr>\
+<tr><th align=left>Kevin Townsend</th><td align=left>Adafruit BMP280 library</td></tr>\
+<tr><th align=left>Limor Fried and Kevin Townsend</th><td align=left>Adafruit MPL3115A2 library</td></tr>\
+<tr><th align=left>Oliver Kraus</th><td align=left>U8g2 LCD, OLED and eInk library</td></tr>\
+<tr><th align=left>Michael Miller</th><td align=left>NeoPixelBus library</td></tr>\
+<tr><th align=left>Shenzhen Xin Yuan (LilyGO) ET company</th><td align=left>TTGO T-Beam board</td></tr>\
+<tr><th align=left>JS Foundation</th><td align=left>jQuery library</td></tr>\
+<tr><th align=left>XCSoar team</th><td align=left>EGM96 data</td></tr>\
+<tr><th align=left>Mike McCauley</th><td align=left>BCM2835 C library</td></tr>\
+<tr><th align=left>Dario Longobardi</th><td align=left>SimpleNetwork library</td></tr>\
+<tr><th align=left>Benoit Blanchon</th><td align=left>ArduinoJson library</td></tr>\
+<tr><th align=left>flashrom.org project</th><td align=left>Flashrom library</td></tr>\
+<tr><th align=left>Robert Wessels and Tony Cave</th><td align=left>EasyLink library</td></tr>\
+<tr><th align=left>Oliver Jowett</th><td align=left>Dump978 library</td></tr>\
+<tr><th align=left>Phil Karn</th><td align=left>FEC library</td></tr>\
+</table>\
+<hr>\
+Copyright (C) 2015-2019 &nbsp;&nbsp;&nbsp; Linar Yusupov\
+</body>\
+</html>";
 
 void handleSettings() {
 
-  size_t size = 4256;
+  size_t size = 4500;
   char *offset;
   size_t len = 0;
   char *Settings_temp = (char *) malloc(size);
@@ -122,23 +168,38 @@ void handleSettings() {
 <th align=left>Protocol</th>\
 <td align=right>\
 <select name='protocol'>\
-<option %s value='%d'>Legacy</option>\
-<option %s value='%d'>OGNTP</option>\
-<option %s value='%d'>P3I</option>\
-<option %s value='%d'>FANET</option>\
+<option %s value='%d'>%s</option>\
+<option %s value='%d'>%s</option>\
+<option %s value='%d'>%s</option>\
+<option %s value='%d'>%s</option>\
 </select>\
 </td>\
 </tr>"),
-    (settings->rf_protocol == RF_PROTOCOL_LEGACY ? "selected" : "") , RF_PROTOCOL_LEGACY,
-    (settings->rf_protocol == RF_PROTOCOL_OGNTP ? "selected" : ""), RF_PROTOCOL_OGNTP,
-    (settings->rf_protocol == RF_PROTOCOL_P3I ? "selected" : ""), RF_PROTOCOL_P3I,
-    (settings->rf_protocol == RF_PROTOCOL_FANET ? "selected" : ""), RF_PROTOCOL_FANET
+    (settings->rf_protocol == RF_PROTOCOL_LEGACY ? "selected" : ""),
+     RF_PROTOCOL_LEGACY, legacy_proto_desc.name,
+    (settings->rf_protocol == RF_PROTOCOL_OGNTP ? "selected" : ""),
+     RF_PROTOCOL_OGNTP, ogntp_proto_desc.name,
+    (settings->rf_protocol == RF_PROTOCOL_P3I ? "selected" : ""),
+     RF_PROTOCOL_P3I, p3i_proto_desc.name,
+    (settings->rf_protocol == RF_PROTOCOL_FANET ? "selected" : ""),
+     RF_PROTOCOL_FANET, fanet_proto_desc.name
     );
-
-    len = strlen(offset);
-    offset += len;
-    size -= len;
+  } else {
+    snprintf_P ( offset, size,
+      PSTR("\
+<tr>\
+<th align=left>Protocol</th>\
+<td align=right>%s\
+</td>\
+</tr>"),
+    (settings->rf_protocol == RF_PROTOCOL_LEGACY   ? legacy_proto_desc.name :
+    (settings->rf_protocol == RF_PROTOCOL_ADSB_UAT ? uat978_proto_desc.name :
+     "UNK"))
+    );
   }
+  len = strlen(offset);
+  offset += len;
+  size -= len;
 
   /* Common part 2 */
   snprintf_P ( offset, size,
@@ -155,6 +216,7 @@ void handleSettings() {
 <option %s value='%d'>NZ (869.25 MHz)</option>\
 <option %s value='%d'>UK (869.52 MHz)</option>\
 <option %s value='%d'>AU (921 MHz)</option>\
+<option %s value='%d'>IN (866 MHz)</option>\
 </select>\
 </td>\
 </tr>\
@@ -217,10 +279,11 @@ void handleSettings() {
   (settings->band == RF_BAND_EU ? "selected" : ""), RF_BAND_EU,
   (settings->band == RF_BAND_RU ? "selected" : ""), RF_BAND_RU,
   (settings->band == RF_BAND_CN ? "selected" : ""), RF_BAND_CN,
-  (settings->band == RF_BAND_US ? "selected" : ""),  RF_BAND_US,
+  (settings->band == RF_BAND_US ? "selected" : ""), RF_BAND_US,
   (settings->band == RF_BAND_NZ ? "selected" : ""), RF_BAND_NZ,
   (settings->band == RF_BAND_UK ? "selected" : ""), RF_BAND_UK,
-  (settings->band == RF_BAND_AU ? "selected" : ""),  RF_BAND_AU,
+  (settings->band == RF_BAND_AU ? "selected" : ""), RF_BAND_AU,
+  (settings->band == RF_BAND_IN ? "selected" : ""), RF_BAND_IN,
   (settings->aircraft_type == AIRCRAFT_TYPE_GLIDER ? "selected" : ""),  AIRCRAFT_TYPE_GLIDER,
   (settings->aircraft_type == AIRCRAFT_TYPE_TOWPLANE ? "selected" : ""),  AIRCRAFT_TYPE_TOWPLANE,
   (settings->aircraft_type == AIRCRAFT_TYPE_POWERED ? "selected" : ""),  AIRCRAFT_TYPE_POWERED,
@@ -299,6 +362,13 @@ void handleSettings() {
 </td>\
 </tr>\
 <tr>\
+<th align=left>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sensors</th>\
+<td align=right>\
+<input type='radio' name='nmea_s' value='0' %s>Off\
+<input type='radio' name='nmea_s' value='1' %s>On\
+</td>\
+</tr>\
+<tr>\
 <th align=left>NMEA output</th>\
 <td align=right>\
 <select name='nmea_out'>\
@@ -308,6 +378,7 @@ void handleSettings() {
   (!settings->nmea_g ? "checked" : "") , (settings->nmea_g ? "checked" : ""),
   (!settings->nmea_p ? "checked" : "") , (settings->nmea_p ? "checked" : ""),
   (!settings->nmea_l ? "checked" : "") , (settings->nmea_l ? "checked" : ""),
+  (!settings->nmea_s ? "checked" : "") , (settings->nmea_s ? "checked" : ""),
   (settings->nmea_out == NMEA_OFF ? "selected" : ""), NMEA_OFF,
   (settings->nmea_out == NMEA_UART ? "selected" : ""), NMEA_UART,
   (settings->nmea_out == NMEA_UDP ? "selected" : ""), NMEA_UDP);
@@ -320,7 +391,7 @@ void handleSettings() {
   if (SoC->id == SOC_ESP32) {
     snprintf_P ( offset, size,
       PSTR("\
-<!-- <option %s value='%d'>TCP</option> -->\
+<option %s value='%d'>TCP</option>\
 <option %s value='%d'>Bluetooth</option>"),
     (settings->nmea_out == NMEA_TCP ? "selected" : ""), NMEA_TCP,
     (settings->nmea_out == NMEA_BLUETOOTH ? "selected" : ""), NMEA_BLUETOOTH);
@@ -424,9 +495,9 @@ void handleSettings() {
   );
 
   SoC->swSer_enableRx(false);
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
+  server.sendHeader(String(F("Cache-Control")), String(F("no-cache, no-store, must-revalidate")));
+  server.sendHeader(String(F("Pragma")), String(F("no-cache")));
+  server.sendHeader(String(F("Expires")), String(F("-1")));
   server.send ( 200, "text/html", Settings_temp );
   SoC->swSer_enableRx(true);
   free(Settings_temp);
@@ -438,6 +509,7 @@ void handleRoot() {
   int hr = min / 60;
 
   float vdd = Battery_voltage() ;
+  bool low_voltage = (Battery_voltage() <= Battery_threshold());
 
   time_t timestamp = ThisAircraft.timestamp;
   unsigned int sats = gnss.satellites.value(); // Number of satellites in use (u32)
@@ -446,7 +518,7 @@ void handleRoot() {
   char str_alt[16];
   char str_Vcc[8];
 
-  char *Root_temp = (char *) malloc(2200);
+  char *Root_temp = (char *) malloc(2300);
   if (Root_temp == NULL) {
     return;
   }
@@ -456,7 +528,7 @@ void handleRoot() {
   dtostrf(ThisAircraft.altitude, 7, 1, str_alt);
   dtostrf(vdd, 4, 2, str_Vcc);
 
-  snprintf_P ( Root_temp, 2200,
+  snprintf_P ( Root_temp, 2300,
     PSTR("<html>\
   <head>\
     <meta name='viewport' content='width=device-width, initial-scale=1'>\
@@ -470,19 +542,22 @@ void handleRoot() {
  </table>\
  <table width=100%%>\
   <tr><th align=left>Device Id</th><td align=right>%X</td></tr>\
-  <tr><th align=left>Software Version</th><td align=right>%s&nbsp;&nbsp;%s</td></tr>\
- </table>\
- <table width=100%%>\
-   <tr>\
-    <td align=left><table><tr><th align=left>GNSS&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
-    <td align=center><table><tr><th align=left>Radio&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
-    <td align=right><table><tr><th align=left>Baro&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
-  </tr>\
- </table>\
- <table width=100%%>\
-  <tr><th align=left>Uptime</th><td align=right>%02d:%02d:%02d</td></tr>\
+  <tr><th align=left>Software Version</th><td align=right>%s&nbsp;&nbsp;%s</td></tr>"
+#if !defined(ENABLE_AHRS)
+ "</table><table width=100%%>\
+  <tr><td align=left><table><tr><th align=left>GNSS&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
+  <td align=center><table><tr><th align=left>Radio&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
+  <td align=right><table><tr><th align=left>Baro&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td></tr>\
+  </table><table width=100%%>"
+#else
+ "<tr><td align=left><table><tr><th align=left>GNSS&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
+  <td align=right><table><tr><th align=left>Radio&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td></tr>\
+  <tr><td align=left><table><tr><th align=left>Baro&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td>\
+  <td align=right><table><tr><th align=left>AHRS&nbsp;&nbsp;</th><td align=right>%s</td></tr></table></td></tr>"
+#endif /* ENABLE_AHRS */
+ "<tr><th align=left>Uptime</th><td align=right>%02d:%02d:%02d</td></tr>\
   <tr><th align=left>Free memory</th><td align=right>%u</td></tr>\
-  <tr><th align=left>Battery voltage</th><td align=right>%s</td></tr>\
+  <tr><th align=left>Battery voltage</th><td align=right><font color=%s>%s</font></td></tr>\
  </table>\
  <table width=100%%>\
    <tr><th align=left>Packets</th>\
@@ -518,14 +593,18 @@ void handleRoot() {
     GNSS_name[hw_info.gnss],
     (rf_chip == NULL ? "NONE" : rf_chip->name),
     (baro_chip == NULL ? "NONE" : baro_chip->name),
+#if defined(ENABLE_AHRS)
+    (ahrs_chip == NULL ? "NONE" : ahrs_chip->name),
+#endif /* ENABLE_AHRS */
     hr, min % 60, sec % 60, ESP.getFreeHeap(),
-    str_Vcc, tx_packets_counter, rx_packets_counter,
+    low_voltage ? "red" : "green", str_Vcc,
+    tx_packets_counter, rx_packets_counter,
     timestamp, sats, str_lat, str_lon, str_alt
   );
   SoC->swSer_enableRx(false);
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
+  server.sendHeader(String(F("Cache-Control")), String(F("no-cache, no-store, must-revalidate")));
+  server.sendHeader(String(F("Pragma")), String(F("no-cache")));
+  server.sendHeader(String(F("Expires")), String(F("-1")));
   server.send ( 200, "text/html", Root_temp );
   SoC->swSer_enableRx(true);
   free(Root_temp);
@@ -533,7 +612,7 @@ void handleRoot() {
 
 void handleInput() {
 
-  char *Input_temp = (char *) malloc(1400);
+  char *Input_temp = (char *) malloc(1450);
   if (Input_temp == NULL) {
     return;
   }
@@ -563,6 +642,8 @@ void handleInput() {
       settings->nmea_p = server.arg(i).toInt();
     } else if (server.argName(i).equals("nmea_l")) {
       settings->nmea_l = server.arg(i).toInt();
+    } else if (server.argName(i).equals("nmea_s")) {
+      settings->nmea_s = server.arg(i).toInt();
     } else if (server.argName(i).equals("nmea_out")) {
       settings->nmea_out = server.arg(i).toInt();
     } else if (server.argName(i).equals("gdl90")) {
@@ -575,7 +656,7 @@ void handleInput() {
       settings->no_track = server.arg(i).toInt();
     }
   }
-  snprintf_P ( Input_temp, 1400,
+  snprintf_P ( Input_temp, 1450,
 PSTR("<html>\
 <head>\
 <meta http-equiv='refresh' content='15; url=/'>\
@@ -597,6 +678,7 @@ PSTR("<html>\
 <tr><th align=left>NMEA GNSS</th><td align=right>%s</td></tr>\
 <tr><th align=left>NMEA Private</th><td align=right>%s</td></tr>\
 <tr><th align=left>NMEA Legacy</th><td align=right>%s</td></tr>\
+<tr><th align=left>NMEA Sensors</th><td align=right>%s</td></tr>\
 <tr><th align=left>NMEA Out</th><td align=right>%d</td></tr>\
 <tr><th align=left>GDL90</th><td align=right>%d</td></tr>\
 <tr><th align=left>DUMP1090</th><td align=right>%d</td></tr>\
@@ -611,8 +693,8 @@ PSTR("<html>\
   settings->aircraft_type, settings->alarm, settings->txpower,
   settings->volume, settings->pointer, settings->bluetooth,
   BOOL_STR(settings->nmea_g), BOOL_STR(settings->nmea_p),
-  BOOL_STR(settings->nmea_l), settings->nmea_out,
-  settings->gdl90, settings->d1090,
+  BOOL_STR(settings->nmea_l), BOOL_STR(settings->nmea_s),
+  settings->nmea_out, settings->gdl90, settings->d1090,
   BOOL_STR(settings->stealth), BOOL_STR(settings->no_track)
   );
   SoC->swSer_enableRx(false);
@@ -621,6 +703,7 @@ PSTR("<html>\
   delay(1000);
   free(Input_temp);
   EEPROM_store();
+  RF_Shutdown();
   delay(1000);
   ESP.restart();
 }
@@ -643,78 +726,27 @@ void handleNotFound() {
   server.send ( 404, "text/plain", message );
 }
 
-void handleAbout() {
-
-  char *About_temp = (char *) malloc(2400);
-  if (About_temp == NULL) {
-    return;
-  }
-
-  snprintf_P ( About_temp, 2400,
-    PSTR("<html>\
-  <head>\
-    <meta name='viewport' content='width=device-width, initial-scale=1'>\
-    <title>About</title>\
-  </head>\
-<body>\
-<h1 align=center>About</h1>\
-<p>This firmware is a part of open SoftRF project</p>\
-<p>URL: http://github.com/lyusupov/SoftRF</p>\
-<p>Author: <b>Linar Yusupov</b></p>\
-<p>E-mail: linar.r.yusupov@gmail.com</p>\
-<h2 align=center>Credits</h2>\
-<p align=center>(in historical order)</p>\
-<table width=100%%>\
-<tr><th align=left>Ivan Grokhotkov</th><td align=left>Arduino core for ESP8266</td></tr>\
-<tr><th align=left>Zak Kemble</th><td align=left>nRF905 library</td></tr>\
-<tr><th align=left>Stanislaw Pusep</th><td align=left>flarm_decode</td></tr>\
-<tr><th align=left>Paul Stoffregen</th><td align=left>Arduino Time Library</td></tr>\
-<tr><th align=left>Mikal Hart</th><td align=left>TinyGPS++ and PString Libraries</td></tr>\
-<tr><th align=left>Phil Burgess</th><td align=left>Adafruit NeoPixel Library</td></tr>\
-<tr><th align=left>Andy Little</th><td align=left>Aircraft and MAVLink Libraries</td></tr>\
-<tr><th align=left>Peter Knight</th><td align=left>TrueRandom Library</td></tr>\
-<tr><th align=left>Matthijs Kooijman</th><td align=left>IBM LMIC framework for Arduino</td></tr>\
-<tr><th align=left>David Paiva</th><td align=left>ESP8266FtpServer</td></tr>\
-<tr><th align=left>Lammert Bies</th><td align=left>Lib_crc</td></tr>\
-<tr><th align=left>Pawel Jalocha</th><td align=left>OGN library</td></tr>\
-<tr><th align=left>Timur Sinitsyn, Tobias Simon, Ferry Huberts</th><td align=left>NMEA library</td></tr>\
-<tr><th align=left>yangbinbin (yangbinbin_ytu@163.com)</th><td align=left>ADS-B encoder C++ library</td></tr>\
-<tr><th align=left>Hristo Gochkov</th><td align=left>Arduino core for ESP32</td></tr>\
-<tr><th align=left>Limor Fried and Ladyada</th><td align=left>Adafruit BMP085 library</td></tr>\
-<tr><th align=left>Kevin Townsend</th><td align=left>Adafruit BMP280 library</td></tr>\
-<tr><th align=left>Limor Fried and Kevin Townsend</th><td align=left>Adafruit MPL3115A2 library</td></tr>\
-<tr><th align=left>Oliver Kraus</th><td align=left>U8g2 LCD, OLED and eInk library</td></tr>\
-<tr><th align=left>Michael Miller</th><td align=left>NeoPixelBus library</td></tr>\
-<tr><th align=left>Shenzhen Xin Yuan (LilyGO) ET company</th><td align=left>TTGO T-Beam board</td></tr>\
-</table>\
-<hr>\
-Copyright (C) 2015-2018 &nbsp;&nbsp;&nbsp; Linar Yusupov\
-</body>\
-</html>")
-  );
-  SoC->swSer_enableRx(false);
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-  server.send ( 200, "text/html", About_temp );
-  SoC->swSer_enableRx(true);
-  free(About_temp);
-}
-
 void Web_setup()
 {
   server.on ( "/", handleRoot );
   server.on ( "/settings", handleSettings );
-  server.on ( "/about", handleAbout );
-  
+  server.on ( "/about", []() {
+    SoC->swSer_enableRx(false);
+    server.sendHeader(String(F("Cache-Control")), String(F("no-cache, no-store, must-revalidate")));
+    server.sendHeader(String(F("Pragma")), String(F("no-cache")));
+    server.sendHeader(String(F("Expires")), String(F("-1")));
+    server.send_P ( 200, PSTR("text/html"), about_html);
+    SoC->swSer_enableRx(true);
+  } );
+
   server.on ( "/input", handleInput );
   server.on ( "/inline", []() {
     server.send ( 200, "text/plain", "this works as well" );
   } );
   server.on("/firmware", HTTP_GET, [](){
     SoC->swSer_enableRx(false);
-    server.sendHeader("Connection", "close");
-    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader(String(F("Connection")), String(F("close")));
+    server.sendHeader(String(F("Access-Control-Allow-Origin")), String(F("*")));
     server.send_P(200,
       PSTR("text/html"),
       PSTR("\
@@ -781,6 +813,7 @@ $('form').submit(function(e){\
     server.sendHeader(String(F("Access-Control-Allow-Origin")), "*");
     server.send(200, String(F("text/plain")), (Update.hasError())?"FAIL":"OK");
 //    SoC->swSer_enableRx(true);
+    RF_Shutdown();
     delay(1000);
     ESP.restart();
   },[](){

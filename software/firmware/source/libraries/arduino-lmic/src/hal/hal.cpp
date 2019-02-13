@@ -8,8 +8,19 @@
  * This the HAL to run LMIC on top of the Arduino environment.
  *******************************************************************************/
 
+#if defined(ARDUINO)
 #include <Arduino.h>
 #include <SPI.h>
+#endif /* ARDUINO */
+
+#if defined(RASPBERRY_PI)
+#include <raspi/raspi.h>
+#endif /* RASPBERRY_PI */
+
+#if defined(ENERGIA_ARCH_CC13XX)
+#include <cc13xx/cc13xx.h>
+#endif /* ENERGIA_ARCH_CC13XX */
+
 #include "../lmic.h"
 #include "hal.h"
 #include <stdio.h>
@@ -59,8 +70,14 @@ void hal_pin_rst (u1_t val) {
     if(val == 0 || val == 1) { // drive pin
         pinMode(lmic_pins.rst, OUTPUT);
         digitalWrite(lmic_pins.rst, val);
-    } else { // keep pin floating
+    } else {
         pinMode(lmic_pins.rst, INPUT);
+#if defined(RASPBERRY_PI)
+        //  with a pullup
+        bcm2835_gpio_set_pud(lmic_pins.rst, BCM2835_GPIO_PUD_UP);
+#else
+        // keep pin floating
+#endif
     }
 }
 
@@ -72,6 +89,13 @@ static void hal_interrupt_init() {
             // we need to check at least one DIO line 
             check_dio = 1; 
             pinMode(lmic_pins.dio[i], INPUT);
+
+#ifdef RASPBERRY_PI
+            // Enable pull down an rising edge detection on this one
+            bcm2835_gpio_set_pud(lmic_pins.dio[i], BCM2835_GPIO_PUD_DOWN);
+            bcm2835_gpio_ren(lmic_pins.dio[i]);
+#endif
+
         }
     }
 }
@@ -85,11 +109,22 @@ static void hal_io_check() {
             if (lmic_pins.dio[i] == LMIC_UNUSED_PIN)
                 continue;
 
+#ifdef RASPBERRY_PI
+            // Rising edge fired ?
+            if (bcm2835_gpio_eds(lmic_pins.dio[i])) {
+                // Now clear the eds flag by setting it to 1
+                bcm2835_gpio_set_eds(lmic_pins.dio[i]);
+                // Handle pseudo interrupt
+                radio_irq_handler(i);
+            }
+#else
             if (dio_states[i] != digitalRead(lmic_pins.dio[i])) {
                 dio_states[i] = !dio_states[i];
-                if (dio_states[i])
+                if (dio_states[i]) {
                     radio_irq_handler(i);
+                }
             }
+#endif
         }
     } else {
         // Check IRQ flags in radio module
@@ -143,9 +178,17 @@ static void hal_io_check() {
 // -----------------------------------------------------------------------------
 // SPI
 
+#ifdef RASPBERRY_PI
+// Clock divider / 32 = 8MHz
+static const SPISettings settings(BCM2835_SPI_CLOCK_DIVIDER_32 , BCM2835_SPI_BIT_ORDER_MSBFIRST, BCM2835_SPI_MODE0);
+#else
 static const SPISettings settings(LMIC_SPI_FREQ, MSBFIRST, SPI_MODE0);
+#endif
 
 static void hal_spi_init () {
+#if defined(ENERGIA_ARCH_CC13XX)
+    SPI.setClockDivider(SPI_CLOCK_MAX / LMIC_SPI_FREQ);
+#endif
     SPI.begin(
 #if defined(ESP32)
         5, 19, 27, 18
@@ -154,10 +197,13 @@ static void hal_spi_init () {
 }
 
 void hal_pin_nss (u1_t val) {
+
+#if !defined(ENERGIA_ARCH_CC13XX)
     if (!val)
         SPI.beginTransaction(settings);
     else
         SPI.endTransaction();
+#endif
 
     //Serial.println(val?">>":"<<");
     digitalWrite(lmic_pins.nss, val);
@@ -173,6 +219,78 @@ u1_t hal_spi (u1_t out) {
     Serial.println(res, HEX);
     */
     return res;
+}
+
+static u1_t spi_buf[MAX_LEN_FRAME + 1];
+
+u1_t hal_spi_read_reg (u1_t addr) {
+    hal_pin_nss(0);
+#if !defined(ENERGIA_ARCH_CC13XX)
+    hal_spi(addr & 0x7F);
+    u1_t val = hal_spi(0x00);
+#else
+    spi_buf[0] = addr & 0x7F;
+    spi_buf[1] = 0;
+    SPI.transfer(spi_buf, 2);
+    u1_t val = spi_buf[1];
+#endif
+    hal_pin_nss(1);
+    return val;
+}
+
+void hal_spi_write_reg (u1_t addr, u1_t data) {
+    hal_pin_nss(0);
+#if !defined(ENERGIA_ARCH_CC13XX)
+    hal_spi(addr | 0x80);
+    hal_spi(data);
+#else
+    spi_buf[0] = addr | 0x80;
+    spi_buf[1] = data;
+    SPI.transfer(spi_buf, 2);
+#endif
+    hal_pin_nss(1);
+}
+
+void hal_spi_read_buf (u1_t addr, u1_t* buf, u1_t len, u1_t inv) {
+    hal_pin_nss(0);
+#if !defined(ENERGIA_ARCH_CC13XX)
+    hal_spi(addr & 0x7F);
+    u1_t i=0;
+    for (i=0; i<len; i++) {
+        buf[i] = (inv == 0 ? hal_spi(0x00) : ~(hal_spi(0x00)));
+    }
+#else
+    spi_buf[0] = addr & 0x7F;
+    u1_t i = 0;
+    for (i=0; i<len; i++) {
+        spi_buf[i+1] = 0;
+    }
+    SPI.transfer(spi_buf, len+1);
+    for (i=0; i<len; i++) {
+        buf[i] = (inv == 0 ? spi_buf[i+1] : ~spi_buf[i+1]);
+    }
+#endif
+    hal_pin_nss(1);
+}
+
+
+void hal_spi_write_buf (u1_t addr, u1_t* buf, u1_t len, u1_t inv) {
+    hal_pin_nss(0);
+#if !defined(ENERGIA_ARCH_CC13XX)
+    hal_spi(addr | 0x80);
+    u1_t i = 0;
+    for (i=0; i<len; i++) {
+        hal_spi(inv == 0 ? buf[i] : ~buf[i]);
+    }
+#else
+    spi_buf[0] = addr | 0x80;
+    u1_t i = 0;
+    for (i=0; i<len; i++) {
+        spi_buf[i+1] = (inv == 0 ? buf[i] : ~buf[i]);
+    }
+    SPI.transfer(spi_buf, len+1);
+#endif
+    hal_pin_nss(1);
 }
 
 // -----------------------------------------------------------------------------

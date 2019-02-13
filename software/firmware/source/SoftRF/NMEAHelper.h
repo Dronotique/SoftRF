@@ -1,6 +1,6 @@
 /*
  * NMEAHelper.h
- * Copyright (C) 2017-2018 Linar Yusupov
+ * Copyright (C) 2017-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,12 +31,17 @@ enum
 	NMEA_BLUETOOTH
 };
 
+#define NMEA_BUFFER_SIZE  128
+
 void NMEA_setup(void);
 void NMEA_loop(void);
 void NMEA_Export(void);
 void NMEA_Position(void);
 void NMEA_Out(byte *, size_t, bool);
 void NMEA_GGA(void);
+void NMEA_add_checksum(char *, size_t);
+
+extern char NMEABuffer[NMEA_BUFFER_SIZE];
 
 #if defined(NMEA_TCP_SERVICE)
 

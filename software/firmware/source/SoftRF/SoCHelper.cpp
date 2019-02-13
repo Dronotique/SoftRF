@@ -1,6 +1,6 @@
 /*
  * SoCHelper.cpp
- * Copyright (C) 2018 Linar Yusupov
+ * Copyright (C) 2018-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 #include "SoCHelper.h"
 
-SoC_ops_t *SoC;
+const SoC_ops_t *SoC;
 
 byte SoC_setup()
 {
@@ -26,6 +26,10 @@ byte SoC_setup()
   SoC = &ESP8266_ops;
 #elif defined(ESP32)
   SoC = &ESP32_ops;
+#elif defined(RASPBERRY_PI)
+  SoC = &RPi_ops;
+#elif defined(ENERGIA_ARCH_CC13XX)
+  SoC = &CC13XX_ops;
 #else
 #error "This hardware platform is not supported!"
 #endif

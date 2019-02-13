@@ -1,6 +1,6 @@
 /*
  * WiFiHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "SoCHelper.h"
 #include "WiFiHelper.h"
 #include "TrafficHelper.h"
+#include "RFHelper.h"
 
 String station_ssid = MY_ACCESSPOINT_SSID ;
 String station_psk  = MY_ACCESSPOINT_PSK ;
@@ -80,7 +81,7 @@ bool loadConfig(String *ssid, String *pass)
   // Read content from config file.
   String content = configFile.readString();
   configFile.close();
-  
+
   content.trim();
 
   // Check if ther is a second line available.
@@ -147,7 +148,7 @@ bool saveConfig(String *ssid, String *pass)
   configFile.println(*pass);
 
   configFile.close();
-  
+
   return true;
 } // saveConfig
 
@@ -171,11 +172,14 @@ size_t Raw_Receive_UDP(uint8_t *buf)
 
 void Raw_Transmit_UDP()
 {
-    size_t num = fo.raw.length();
+    size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    rx_size = rx_size > sizeof(fo.raw) ? sizeof(fo.raw) : rx_size;
+    String str = Bin2Hex(fo.raw, rx_size);
+    size_t len = str.length();
     // ASSERT(sizeof(UDPpacketBuffer) > 2 * PKT_SIZE + 1)
-    fo.raw.toCharArray(UDPpacketBuffer, sizeof(UDPpacketBuffer));
-    UDPpacketBuffer[num] = '\n';
-    SoC->WiFi_transmit_UDP(RELAY_DST_PORT, (byte *)UDPpacketBuffer, num + 1);
+    str.toCharArray(UDPpacketBuffer, sizeof(UDPpacketBuffer));
+    UDPpacketBuffer[len] = '\n';
+    SoC->WiFi_transmit_UDP(RELAY_DST_PORT, (byte *)UDPpacketBuffer, len + 1);
 }
 
 /**
@@ -293,8 +297,7 @@ void WiFi_loop()
 {
 #if defined(USE_DNS_SERVER)
   if (dns_active) {
-    dnsServer.processNextRequest();  
+    dnsServer.processNextRequest();
   }
 #endif
 }
-

@@ -1,6 +1,6 @@
 /*
  * RFHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,26 +15,30 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#if defined(ARDUINO)
 #include <SPI.h>
+#endif /* ARDUINO */
 
 #include "RFHelper.h"
 #include "Protocol_Legacy.h"
 #include "Protocol_OGNTP.h"
 #include "Protocol_P3I.h"
 #include "Protocol_FANET.h"
+#include "Protocol_UAT978.h"
 #include "SoCHelper.h"
 #include "EEPROMHelper.h"
 #include "WebHelper.h"
 #include "MAVLinkHelper.h"
+#include <fec.h>
 
 #if LOGGER_IS_ENABLED
 #include "LogHelper.h"
 #endif /* LOGGER_IS_ENABLED */
 
-byte RxBuffer[PKT_SIZE];
-unsigned long TxTimeMarker = 0;
+byte RxBuffer[MAX_PKT_SIZE];
 
-byte TxPkt[MAX_PKT_SIZE];
+unsigned long TxTimeMarker = 0;
+byte TxBuffer[MAX_PKT_SIZE];
 
 uint32_t tx_packets_counter = 0;
 uint32_t rx_packets_counter = 0;
@@ -47,31 +51,54 @@ static bool RF_ready = false;
 static size_t RF_tx_size = 0;
 static long TxRandomValue = 0;
 
-rfchip_ops_t *rf_chip = NULL;
+const rfchip_ops_t *rf_chip = NULL;
 bool RF_SX1276_RST_is_connected = true;
 
 size_t (*protocol_encode)(void *, ufo_t *);
 bool (*protocol_decode)(void *, ufo_t *, ufo_t *);
 
-rfchip_ops_t nrf905_ops = {
+const rfchip_ops_t nrf905_ops = {
   RF_IC_NRF905,
   "NRF905",
   nrf905_probe,
   nrf905_setup,
   nrf905_channel,
   nrf905_receive,
-  nrf905_transmit
+  nrf905_transmit,
+  nrf905_shutdown
 };
 
-rfchip_ops_t sx1276_ops = {
+const rfchip_ops_t sx1276_ops = {
   RF_IC_SX1276,
   "SX1276",
   sx1276_probe,
   sx1276_setup,
   sx1276_channel,
   sx1276_receive,
-  sx1276_transmit
+  sx1276_transmit,
+  sx1276_shutdown
 };
+
+const rfchip_ops_t cc13xx_ops = {
+  RF_IC_CC13XX,
+  "CC13XX",
+  cc13xx_probe,
+  cc13xx_setup,
+  cc13xx_channel,
+  cc13xx_receive,
+  cc13xx_transmit,
+  cc13xx_shutdown
+};
+
+String Bin2Hex(byte *buffer, size_t size)
+{
+  String str = "";
+  for (int i=0; i < size; i++) {
+    byte c = buffer[i];
+    str += (c < 0x10 ? "0" : "") + String(c, HEX);
+  }
+  return str;
+}
 
 uint8_t parity(uint32_t x) {
     uint8_t parity=0;
@@ -94,8 +121,15 @@ byte RF_setup(void)
     } else if (nrf905_ops.probe()) {
       rf_chip = &nrf905_ops;
       Serial.println(F("NRF905 RFIC is detected."));
+    } else if (cc13xx_ops.probe()) {
+      rf_chip = &cc13xx_ops;
+      Serial.println(F("CC13XX RFIC is detected."));
     } else {
-      Serial.println(F("WARNING! Neither SX1276 nor NRF905 RFIC is detected!"));    
+      Serial.println(F("WARNING! Neither SX1276"
+#if !defined(ENERGIA_ARCH_CC13XX)
+      ", CC13XX"
+#endif
+        " or NRF905 RFIC is detected!"));
     }
   }  
 
@@ -203,7 +237,7 @@ void RF_loop()
   }
 }
 
-size_t RF_Encode(void)
+size_t RF_Encode(ufo_t *fop)
 {
   size_t size = 0;
   if (RF_ready && protocol_encode) {
@@ -213,29 +247,33 @@ size_t RF_Encode(void)
     }
 
     if ((millis() - TxTimeMarker) > TxRandomValue) {
-      size = (*protocol_encode)((void *) &TxPkt[0], &ThisAircraft);
+      size = (*protocol_encode)((void *) &TxBuffer[0], fop);
     }
   }
   return size;
 }
 
-void RF_Transmit(size_t size)
+bool RF_Transmit(size_t size, bool wait)
 {
   if (RF_ready && rf_chip && (size > 0)) {
     RF_tx_size = size;
 
     if (settings->txpower == RF_TX_POWER_OFF ) {
-      return;
+      return true;
     }
 
-    if ((millis() - TxTimeMarker) > TxRandomValue) {
+    if (!wait || (millis() - TxTimeMarker) > TxRandomValue) {
 
       time_t timestamp = now();
 
       rf_chip->transmit();
 
       if (settings->nmea_p) {
-        StdOut.print(F("$PSRFO,")); StdOut.print(timestamp); StdOut.print(F(",")); StdOut.println(Bin2Hex((byte *) &TxPkt[0]));
+        StdOut.print(F("$PSRFO,"));
+        StdOut.print((unsigned long) timestamp);
+        StdOut.print(F(","));
+        StdOut.println(Bin2Hex((byte *) &TxBuffer[0],
+                               RF_Payload_Size(settings->rf_protocol)));
       }
       tx_packets_counter++;
       RF_tx_size = 0;
@@ -245,8 +283,11 @@ void RF_Transmit(size_t size)
         SoC->random(LEGACY_TX_INTERVAL_MIN, LEGACY_TX_INTERVAL_MAX));
 
       TxTimeMarker = millis();
+
+      return true;
     }
   }
+  return false;
 }
 
 bool RF_Receive(void)
@@ -258,6 +299,26 @@ bool RF_Receive(void)
   }
   
   return rval;
+}
+
+void RF_Shutdown(void)
+{
+  if (rf_chip) {
+    rf_chip->shutdown();
+  }
+}
+
+uint8_t RF_Payload_Size(uint8_t protocol)
+{
+  switch (protocol)
+  {
+    case RF_PROTOCOL_LEGACY:    return legacy_proto_desc.payload_size;
+    case RF_PROTOCOL_OGNTP:     return ogntp_proto_desc.payload_size;
+    case RF_PROTOCOL_P3I:       return p3i_proto_desc.payload_size;
+    case RF_PROTOCOL_FANET:     return fanet_proto_desc.payload_size;
+    case RF_PROTOCOL_ADSB_UAT:  return uat978_proto_desc.payload_size;
+    default:                    return 0;
+  }
 }
 
 /*
@@ -278,7 +339,10 @@ bool nrf905_probe()
   pinMode(CSN, OUTPUT);
 
   SoC->SPI_begin();
+
+#if defined(ARDUINO)
   SPI.setClockDivider(SPI_CLOCK_DIV2);
+#endif /* ARDUINO */
 
   digitalWrite(CSN, LOW);
 
@@ -368,12 +432,15 @@ void nrf905_setup()
   byte addr[] = RXADDR;
   nRF905_setRXAddress(addr);
 
-  // Put into receive mode
-  nRF905_receive();
+  /* Enforce radio settings to follow "Legacy" protocol's RF specs */
+  settings->rf_protocol = RF_PROTOCOL_LEGACY;
 
+  /* Enforce encoder and decoder to process "Legacy" frames only */
   protocol_encode = &legacy_encode;
   protocol_decode = &legacy_decode;
 
+  /* Put IC into receive mode */
+  nRF905_receive();
 }
 
 bool nrf905_receive()
@@ -386,7 +453,7 @@ bool nrf905_receive()
     nrf905_receive_active = true;
   }
 
-  success = nRF905_getData(RxBuffer, sizeof(RxBuffer));
+  success = nRF905_getData(RxBuffer, LEGACY_PAYLOAD_SIZE);
   if (success) { // Got data
     rx_packets_counter++;
   }
@@ -407,12 +474,17 @@ void nrf905_transmit()
     nRF905_setTXAddress(addr);
 
     // Set payload data
-    nRF905_setData(&TxPkt[0], NRF905_PAYLOAD_SIZE );
+    nRF905_setData(&TxBuffer[0], LEGACY_PAYLOAD_SIZE );
 
     // Send payload (send fails if other transmissions are going on, keep trying until success)
     while (!nRF905_send()) {
       yield();
     } ;
+}
+
+void nrf905_shutdown()
+{
+
 }
 
 /*
@@ -527,6 +599,11 @@ void sx1276_setup()
     LMIC.protocol = &legacy_proto_desc;
     protocol_encode = &legacy_encode;
     protocol_decode = &legacy_decode;
+    /*
+     * Enforce legacy protocol setting for SX1276
+     * if other value (UAT) left in EEPROM from other (CC13XX) radio
+     */
+    settings->rf_protocol = RF_PROTOCOL_LEGACY;
     break;
   }
 
@@ -540,7 +617,7 @@ void sx1276_setup()
     /* SX1276 is unable to give more than 20 dBm */
     if (LMIC.txpow > 20)
       LMIC.txpow = 20;
-
+#if 1
     /*
      * Enforce Tx power limit until confirmation
      * that RFM95W is doing well
@@ -548,7 +625,7 @@ void sx1276_setup()
      */
     if (LMIC.txpow > 17)
       LMIC.txpow = 17;
-
+#endif
     break;
   case RF_TX_POWER_OFF:
   case RF_TX_POWER_LOW:
@@ -601,6 +678,10 @@ bool sx1276_receive()
 
     u1_t size = LMIC.dataLen - LMIC.protocol->payload_offset - LMIC.protocol->crc_size;
 
+    if (size >sizeof(RxBuffer)) {
+      size = sizeof(RxBuffer);
+    }
+
     for (u1_t i=0; i < size; i++) {
         RxBuffer[i] = LMIC.frame[i + LMIC.protocol->payload_offset];
     }
@@ -626,6 +707,11 @@ void sx1276_transmit()
       os_runloop_once();
       yield();
     };
+}
+
+void sx1276_shutdown()
+{
+  LMIC_shutdown();
 }
 
 // Enable rx mode and call func when a packet is received
@@ -901,6 +987,156 @@ static void sx1276_txdone_func (osjob_t* job) {
 static void sx1276_tx_func (osjob_t* job) {
 
   if (RF_tx_size > 0) {
-    sx1276_tx((unsigned char *) &TxPkt[0], RF_tx_size, sx1276_txdone_func);
+    sx1276_tx((unsigned char *) &TxBuffer[0], RF_tx_size, sx1276_txdone_func);
   }
+}
+
+/*
+ * CC13XX-specific code
+ *
+ *
+ */
+
+#define UAT_RINGBUF_SIZE  (sizeof(Stratux_frame_t) * 2)
+
+static unsigned char uat_ringbuf[UAT_RINGBUF_SIZE];
+static unsigned int uatbuf_head = 0;
+Stratux_frame_t uatradio_frame;
+
+const char UAT_ident[] PROGMEM = SOFTRF_UAT_IDENT;
+
+bool cc13xx_probe()
+{
+  bool success = false;
+  unsigned long startTime;
+  unsigned int uatbuf_tail;
+  u1_t keylen = strlen_P(UAT_ident);
+  u1_t i=0;
+
+  /* Do not probe on itself and ESP8266 */
+  if (SoC->id == SOC_CC13XX ||
+      SoC->id == SOC_ESP8266) {
+    return success;
+  }
+
+  SoC->UATSerial_begin(2000000);
+
+  SoC->CC13XX_restart();
+
+  startTime = millis();
+
+  // Timeout if no valid response in 1 second
+  while (millis() - startTime < 1000) {
+
+    if (UATSerial.available() > 0) {
+      unsigned char c = UATSerial.read();
+#if DEBUG
+      Serial.println(c, HEX);
+#endif
+      uat_ringbuf[uatbuf_head % UAT_RINGBUF_SIZE] = c;
+
+      uatbuf_tail = uatbuf_head - keylen;
+      uatbuf_head++;
+
+      for (i=0; i < keylen; i++) {
+        if (pgm_read_byte(&UAT_ident[i]) != uat_ringbuf[(uatbuf_tail + i) % UAT_RINGBUF_SIZE]) {
+          break;
+        }
+      }
+
+      if (i >= keylen) {
+        success = true;
+        break;
+      }
+    }
+  }
+
+  /* cleanup UAT data buffer */
+  uatbuf_head = 0;
+  memset(uat_ringbuf, 0, sizeof(uat_ringbuf));
+
+  /* Current ESP32 Core has a bug with Serial2.end()+Serial2.begin() cycle */
+  if (SoC->id != SOC_ESP32) {
+    UATSerial.end();
+  }
+
+  return success;
+}
+
+void cc13xx_channel(uint8_t channel)
+{
+  /* Nothing to do */
+}
+
+void cc13xx_setup()
+{
+  /* Current ESP32 Core has a bug with Serial2.end()+Serial2.begin() cycle */
+  if (SoC->id != SOC_ESP32) {
+    SoC->UATSerial_begin(2000000);
+  }
+
+  init_fec();
+
+  /* Enforce radio settings to follow UAT978 protocol's RF specs */
+  settings->rf_protocol = RF_PROTOCOL_ADSB_UAT;
+
+  protocol_encode = &uat978_encode;
+  protocol_decode = &uat978_decode;
+}
+
+bool cc13xx_receive()
+{
+  bool success = false;
+  unsigned int uatbuf_tail;
+  int rs_errors;
+
+  while (UATSerial.available()) {
+    unsigned char c = UATSerial.read();
+
+    uat_ringbuf[uatbuf_head % UAT_RINGBUF_SIZE] = c;
+
+    uatbuf_tail = uatbuf_head - sizeof(Stratux_frame_t);
+    uatbuf_head++;
+
+    if (uat_ringbuf[ uatbuf_tail      % UAT_RINGBUF_SIZE] == STRATUX_UATRADIO_MAGIC_1 &&
+        uat_ringbuf[(uatbuf_tail + 1) % UAT_RINGBUF_SIZE] == STRATUX_UATRADIO_MAGIC_2 &&
+        uat_ringbuf[(uatbuf_tail + 2) % UAT_RINGBUF_SIZE] == STRATUX_UATRADIO_MAGIC_3 &&
+        uat_ringbuf[(uatbuf_tail + 3) % UAT_RINGBUF_SIZE] == STRATUX_UATRADIO_MAGIC_4) {
+
+      unsigned char *pre_fec_buf = (unsigned char *) &uatradio_frame;
+      for (u1_t i=0; i < sizeof(Stratux_frame_t); i++) {
+          pre_fec_buf[i] = uat_ringbuf[(uatbuf_tail + i) % UAT_RINGBUF_SIZE];
+      }
+
+      int frame_type = correct_adsb_frame(uatradio_frame.data, &rs_errors);
+
+      if (frame_type == -1) {
+        continue;
+      }
+
+      u1_t size = uatradio_frame.msgLen > sizeof(RxBuffer) ?
+                        sizeof(RxBuffer) : uatradio_frame.msgLen;
+
+      for (u1_t i=0; i < size; i++) {
+          RxBuffer[i] = uatradio_frame.data[i];
+      }
+
+      RF_last_rssi = uatradio_frame.rssi;
+      rx_packets_counter++;
+
+      success = true;
+      break;
+    }
+  }
+  return success;
+}
+
+void cc13xx_transmit()
+{
+  /* Nothing to do */
+}
+
+void cc13xx_shutdown()
+{
+  /* Nothing to do */
 }

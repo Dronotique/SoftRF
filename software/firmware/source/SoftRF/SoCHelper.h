@@ -1,6 +1,6 @@
 /*
  * SoCHelper.h
- * Copyright (C) 2018 Linar Yusupov
+ * Copyright (C) 2018-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,8 @@
 #include "SoftRF.h"
 #include "Platform_ESP8266.h"
 #include "Platform_ESP32.h"
+#include "Platform_RPi.h"
+#include "Platform_CC13XX.h"
 #include "BluetoothHelper.h"
 
 typedef struct SoC_ops_struct {
@@ -31,8 +33,6 @@ typedef struct SoC_ops_struct {
   const char name[16];
   void (*setup)();
   uint32_t (*getChipId)();
-  uint32_t (*getFlashChipId)();
-  uint32_t (*getFlashChipRealSize)();
   void* (*getResetInfoPtr)();
   String (*getResetInfo)();
   String (*getResetReason)();
@@ -56,21 +56,32 @@ typedef struct SoC_ops_struct {
   void (*GNSS_PPS_handler)();
   unsigned long (*get_PPS_TimeMarker)();
   bool (*Baro_setup)();
+  void (*UATSerial_begin)(unsigned long);
+  void (*CC13XX_restart)();
+  void (*WDT_setup)();
 } SoC_ops_t;
 
 enum
 {
 	SOC_NONE,
 	SOC_ESP8266,
-	SOC_ESP32
+	SOC_ESP32,
+	SOC_RPi,
+	SOC_CC13XX
 };
 
-extern SoC_ops_t *SoC;
+extern const SoC_ops_t *SoC;
 #if defined(ESP8266)
-extern SoC_ops_t ESP8266_ops;
+extern const SoC_ops_t ESP8266_ops;
 #endif
 #if defined(ESP32)
-extern SoC_ops_t ESP32_ops;
+extern const SoC_ops_t ESP32_ops;
+#endif
+#if defined(RASPBERRY_PI)
+extern const SoC_ops_t RPi_ops;
+#endif
+#if defined(ENERGIA_ARCH_CC13XX)
+extern const SoC_ops_t CC13XX_ops;
 #endif
 
 byte SoC_setup(void);

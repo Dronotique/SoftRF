@@ -2,7 +2,7 @@
  *
  * Protocol_OGNTP.cpp
  * Encoder and decoder for Open Glider Network tracker radio protocol
- * Copyright (C) 2017-2018 Linar Yusupov
+ * Copyright (C) 2017-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@
 #include "RFHelper.h"
 
 const rf_proto_desc_t ogntp_proto_desc = {
+  "OGNTP",
   .type            = RF_PROTOCOL_OGNTP,
   .modulation_type = RF_MODULATION_TYPE_2FSK,
   .preamble_type   = OGNTP_PREAMBLE_TYPE,
@@ -123,7 +124,7 @@ size_t ogntp_encode(void *pkt, ufo_t *this_aircraft) {
   pos.Encode(ogn_tx_pkt.Packet);
 
   ogn_tx_pkt.Packet.Header.Address = this_aircraft->addr;
-  ogn_tx_pkt.Packet.Header.AddrType = ADDR_TYPE_OGN;
+  ogn_tx_pkt.Packet.Header.AddrType = ADDR_TYPE_ANONYMOUS;
   ogn_tx_pkt.Packet.Header.Parity = parity(ogn_tx_pkt.Packet.HeaderWord & 0x0FFFFFFF); /* lowest 28 bits */
 
   ogn_tx_pkt.Packet.Position.AcftType = (int16_t) this_aircraft->aircraft_type;

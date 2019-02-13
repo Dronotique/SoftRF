@@ -1,6 +1,6 @@
 /*
  * RFHelper.h
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,13 +31,30 @@
 #include "SoftRF.h"
 #include "GNSSHelper.h"
 #include "Protocol_Legacy.h"
+#include "Protocol_OGNTP.h"
 #include "Protocol_P3I.h"
+#include "Protocol_FANET.h"
+#include "Protocol_UAT978.h"
+
+#define maxof2(a,b)       (a > b ? a : b)
+#define maxof3(a,b,c)     maxof2(maxof2(a,b),c)
+#define maxof5(a,b,c,d,e) maxof2(maxof2(a,b),maxof3(c,d,e))
+
+/* Max. paket's payload size for all supported RF protocols */
+//#define MAX_PKT_SIZE  32 /* 48 = UAT LONG_FRAME_DATA_BYTES */
+#define MAX_PKT_SIZE  maxof5(LEGACY_PAYLOAD_SIZE, OGNTP_PAYLOAD_SIZE, \
+                             P3I_PAYLOAD_SIZE, FANET_PAYLOAD_SIZE, \
+                             UAT978_PAYLOAD_SIZE)
+
+#define RXADDR {0x31, 0xfa , 0xb6} // Address of this device (4 bytes)
+#define TXADDR {0x31, 0xfa , 0xb6} // Address of device to send to (4 bytes)
 
 enum
 {
   RF_IC_NONE,
   RF_IC_NRF905,
-  RF_IC_SX1276
+  RF_IC_SX1276,
+  RF_IC_CC13XX
 };
 
 enum
@@ -47,9 +64,6 @@ enum
   RF_TX_POWER_OFF
 };
 
-#define RXADDR {0x31, 0xfa , 0xb6} // Address of this device (4 bytes)
-#define TXADDR {0x31, 0xfa , 0xb6} // Address of device to send to (4 bytes)
-
 typedef struct rfchip_ops_struct {
   byte type;
   const char name[8];
@@ -58,34 +72,47 @@ typedef struct rfchip_ops_struct {
   void (*channel)(uint8_t);
   bool (*receive)();
   void (*transmit)();
+  void (*shutdown)();
 } rfchip_ops_t;
 
+String Bin2Hex(byte *, size_t);
 uint8_t parity(uint32_t);
 
-byte RF_setup(void);
-void RF_SetChannel(void);
-void RF_loop(void);
-size_t RF_Encode(void);
-void RF_Transmit(size_t);
-bool RF_Receive(void);
+byte    RF_setup(void);
+void    RF_SetChannel(void);
+void    RF_loop(void);
+size_t  RF_Encode(ufo_t *);
+bool    RF_Transmit(size_t, bool);
+bool    RF_Receive(void);
+void    RF_Shutdown(void);
+uint8_t RF_Payload_Size(uint8_t);
 
 bool nrf905_probe(void);
 void nrf905_setup(void);
 void nrf905_channel(uint8_t);
 bool nrf905_receive(void);
 void nrf905_transmit(void);
+void nrf905_shutdown(void);
 
 bool sx1276_probe(void);
 void sx1276_setup(void);
 void sx1276_channel(uint8_t);
 bool sx1276_receive(void);
 void sx1276_transmit(void);
+void sx1276_shutdown(void);
 
-extern byte TxBuffer[PKT_SIZE], RxBuffer[PKT_SIZE];
+bool cc13xx_probe(void);
+void cc13xx_setup(void);
+void cc13xx_channel(uint8_t);
+bool cc13xx_receive(void);
+void cc13xx_transmit(void);
+void cc13xx_shutdown(void);
+
+extern byte TxBuffer[MAX_PKT_SIZE], RxBuffer[MAX_PKT_SIZE];
 extern unsigned long TxTimeMarker;
-extern byte TxPkt[MAX_PKT_SIZE];
+//extern byte TxPkt[MAX_PKT_SIZE];
 
-extern rfchip_ops_t *rf_chip;
+extern const rfchip_ops_t *rf_chip;
 extern bool RF_SX1276_RST_is_connected;
 extern size_t (*protocol_encode)(void *, ufo_t *);
 extern bool (*protocol_decode)(void *, ufo_t *, ufo_t *);

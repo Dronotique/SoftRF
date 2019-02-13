@@ -1,6 +1,6 @@
 /*
  * SoftRF(.ino) firmware
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * Author: Linar Yusupov, linar.r.yusupov@gmail.com
  *
@@ -26,6 +26,15 @@
  *   Adafruit MPL3115A2 library is developed by Limor Fried and Kevin Townsend
  *   U8g2 monochrome LCD, OLED and eInk library is developed by Oliver Kraus
  *   NeoPixelBus library is developed by Michael Miller
+ *   jQuery library is developed by JS Foundation
+ *   EGM96 data is developed by XCSoar team
+ *   BCM2835 C library is developed by Mike McCauley
+ *   SimpleNetwork library is developed by Dario Longobardi
+ *   ArduinoJson library is developed by Benoit Blanchon
+ *   Flashrom library is part of the flashrom.org project
+ *   EasyLink library is developed by Robert Wessels and Tony Cave
+ *   Dump978 library is developed by Oliver Jowett
+ *   FEC library is developed by Phil Karn
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,6 +71,10 @@
 
 #include "SoftRF.h"
 
+#if defined(ENABLE_AHRS)
+#include "AHRSHelper.h"
+#endif /* ENABLE_AHRS */
+
 #if LOGGER_IS_ENABLED
 #include "LogHelper.h"
 #endif /* LOGGER_IS_ENABLED */
@@ -95,7 +108,6 @@ void setup()
   resetInfo = (rst_info *) SoC->getResetInfoPtr();
 
   Serial.begin(38400);
-  //Misc_info();
 
 #if LOGGER_IS_ENABLED
   Logger_setup();
@@ -104,6 +116,9 @@ void setup()
   Serial.println(""); Serial.print(F("Reset reason: ")); Serial.println(resetInfo->reason);
   Serial.println(SoC->getResetReason());
   Serial.print(F("Free heap size: ")); Serial.println(ESP.getFreeHeap());
+#if defined(ESP32_DEVEL_CORE)
+  Serial.print(F("PSRAM: ")); Serial.println(psramFound() ? F("found") : F("not found"));
+#endif
   Serial.println(SoC->getResetInfo()); Serial.println("");
 
   EEPROM_setup();
@@ -118,6 +133,9 @@ void setup()
   delay(100);
 
   hw_info.baro = Baro_setup();
+#if defined(ENABLE_AHRS)
+  hw_info.ahrs = AHRS_setup();
+#endif /* ENABLE_AHRS */
   hw_info.display = SoC->Display_setup();
 
   if (settings->mode == SOFTRF_MODE_UAV) {
@@ -176,6 +194,8 @@ void setup()
     SoC->swSer_enableRx(true);
     break;
   }
+
+  SoC->WDT_setup();
 }
 
 void loop()
@@ -209,9 +229,6 @@ void loop()
   // battery status LED
   LED_loop();
 
-  // Handle Air Connect
-  NMEA_loop();
-
   // Handle DNS
   WiFi_loop();
 
@@ -234,12 +251,16 @@ void normal_loop()
 
   Baro_loop();
 
+#if defined(ENABLE_AHRS)
+  AHRS_loop();
+#endif /* ENABLE_AHRS */
+
   PickGNSSFix();
 
   GNSSTimeSync();
 
   ThisAircraft.timestamp = now();
-  if (isValidFix()) {
+  if (isValidGNSSFix()) {
     ThisAircraft.latitude = gnss.location.lat();
     ThisAircraft.longitude = gnss.location.lng();
     ThisAircraft.altitude = gnss.altitude.meters();
@@ -260,7 +281,7 @@ void normal_loop()
       ThisAircraft.altitude -= ThisAircraft.geoid_separation;
     }
 
-    RF_Transmit(RF_Encode());
+    RF_Transmit(RF_Encode(&ThisAircraft), true);
   }
 
   success = RF_Receive();
@@ -269,18 +290,18 @@ void normal_loop()
   success = true;
 #endif
 
-  if (success && isValidFix()) ParseData();
+  if (success && isValidGNSSFix()) ParseData();
 
 #if defined(ENABLE_TTN)
   TTN_loop();
 #endif
 
-  if (isValidFix()) {
+  if (isValidGNSSFix()) {
     Traffic_loop();
   }
 
   if (isTimeToDisplay()) {
-    if (isValidFix()) {
+    if (isValidGNSSFix()) {
       LED_DisplayTraffic();
     } else {
       LED_Clear();
@@ -288,12 +309,15 @@ void normal_loop()
     LEDTimeMarker = millis();
   }
 
-  if (isTimeToExport() && isValidFix()) {
+  if (isTimeToExport() && isValidGNSSFix()) {
     NMEA_Export();
     GDL90_Export();
     D1090_Export();
     ExportTimeMarker = millis();
   }
+
+  // Handle Air Connect
+  NMEA_loop();
 
   ClearExpired();
 
@@ -310,7 +334,7 @@ void uav_loop()
 
   ThisAircraft.timestamp = now();
 
-  if (MAVisValidFix()) {
+  if (isValidMAVFix()) {
     ThisAircraft.latitude = the_aircraft.location.gps_lat / 1e7;
     ThisAircraft.longitude = the_aircraft.location.gps_lon / 1e7;
     ThisAircraft.altitude = the_aircraft.location.gps_alt / 1000.0;
@@ -319,14 +343,14 @@ void uav_loop()
     ThisAircraft.pressure_altitude = the_aircraft.location.baro_alt;
     ThisAircraft.hdop = the_aircraft.location.gps_hdop;
 
-    RF_Transmit(RF_Encode());
+    RF_Transmit(RF_Encode(&ThisAircraft), true);
   }
 
   success = RF_Receive();
 
-  if (success && MAVisValidFix()) ParseData();
+  if (success && isValidMAVFix()) ParseData();
 
-  if (isTimeToExport() && MAVisValidFix()) {
+  if (isTimeToExport() && isValidMAVFix()) {
     MAVLinkShareTraffic();
     ExportTimeMarker = millis();
   }
@@ -338,21 +362,27 @@ void bridge_loop()
 {
   bool success;
 
-  size_t tx_size = Raw_Receive_UDP(&TxPkt[0]);
+  size_t tx_size = Raw_Receive_UDP(&TxBuffer[0]);
 
   if (tx_size > 0) {
-    RF_Transmit(tx_size);
+    RF_Transmit(tx_size, true);
   }
 
   success = RF_Receive();
 
   if(success)
   {
+    size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    rx_size = rx_size > sizeof(fo.raw) ? sizeof(fo.raw) : rx_size;
 
-    fo.raw = Bin2Hex(RxBuffer);
+    memset(fo.raw, 0, sizeof(fo.raw));
+    memcpy(fo.raw, RxBuffer, rx_size);
 
     if (settings->nmea_p) {
-      StdOut.print(F("$PSRFI,")); StdOut.print(now()); StdOut.print(F(",")); StdOut.println(fo.raw);
+      StdOut.print(F("$PSRFI,"));
+      StdOut.print((unsigned long) now());    StdOut.print(F(","));
+      StdOut.print(Bin2Hex(fo.raw, rx_size)); StdOut.print(F(","));
+      StdOut.println(RF_last_rssi);
     }
 
     Raw_Transmit_UDP();
@@ -371,10 +401,17 @@ void watchout_loop()
   success = RF_Receive();
 
   if (success) {
-    fo.raw = Bin2Hex(RxBuffer);
+    size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    rx_size = rx_size > sizeof(fo.raw) ? sizeof(fo.raw) : rx_size;
+
+    memset(fo.raw, 0, sizeof(fo.raw));
+    memcpy(fo.raw, RxBuffer, rx_size);
 
     if (settings->nmea_p) {
-      StdOut.print(F("$PSRFI,")); StdOut.print(now()); StdOut.print(F(",")); StdOut.println(fo.raw);
+      StdOut.print(F("$PSRFI,"));
+      StdOut.print((unsigned long) now());    StdOut.print(F(","));
+      StdOut.print(Bin2Hex(fo.raw, rx_size)); StdOut.print(F(","));
+      StdOut.println(RF_last_rssi);
     }
   }
 
@@ -408,6 +445,7 @@ void txrx_test_loop()
   ThisAircraft.altitude = TXRX_TEST_ALTITUDE;
   ThisAircraft.course = TXRX_TEST_COURSE;
   ThisAircraft.speed = TXRX_TEST_SPEED;
+  ThisAircraft.vs = TXRX_TEST_VS;
 
 #if DEBUG_TIMING
   baro_start_ms = millis();
@@ -417,10 +455,14 @@ void txrx_test_loop()
   baro_end_ms = millis();
 #endif
 
+#if defined(ENABLE_AHRS)
+  AHRS_loop();
+#endif /* ENABLE_AHRS */
+
 #if DEBUG_TIMING
   tx_start_ms = millis();
 #endif
-  RF_Transmit(RF_Encode());
+  RF_Transmit(RF_Encode(&ThisAircraft), true);
 #if DEBUG_TIMING
   tx_end_ms = millis();
   rx_start_ms = millis();
@@ -521,6 +563,9 @@ void txrx_test_loop()
     Serial.println(oled_end_ms);
   }
 #endif
+
+  // Handle Air Connect
+  NMEA_loop();
 
   ClearExpired();
 }

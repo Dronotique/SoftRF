@@ -1,6 +1,6 @@
 /*
  * Platform_ESP8266.cpp
- * Copyright (C) 2018 Linar Yusupov
+ * Copyright (C) 2018-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -76,16 +76,6 @@ static uint32_t ESP8266_getChipId()
 #else
   return (SOFTRF_ADDRESS & 0xFFFFFFFFU );
 #endif
-}
-
-static uint32_t ESP8266_getFlashChipId()
-{
-  return ESP.getFlashChipId();
-}
-
-static uint32_t ESP8266_getFlashChipRealSize()
-{
-  return ESP.getFlashChipRealSize();
 }
 
 static void* ESP8266_getResetInfoPtr()
@@ -269,13 +259,26 @@ static bool ESP8266_Baro_setup() {
   return true;
 }
 
-SoC_ops_t ESP8266_ops = {
+static void ESP8266_UATSerial_begin(unsigned long baud)
+{
+  UATSerial.begin(baud);
+}
+
+static void ESP8266_CC13XX_restart()
+{
+  /* TBD */
+}
+
+static void ESP8266_WDT_setup()
+{
+  /* TBD */
+}
+
+const SoC_ops_t ESP8266_ops = {
   SOC_ESP8266,
   "ESP8266",
   ESP8266_setup,
   ESP8266_getChipId,
-  ESP8266_getFlashChipId,
-  ESP8266_getFlashChipRealSize,
   ESP8266_getResetInfoPtr,
   ESP8266_getResetInfo,
   ESP8266_getResetReason,
@@ -298,7 +301,10 @@ SoC_ops_t ESP8266_ops = {
   ESP8266_Battery_voltage,
   ESP8266_GNSS_PPS_Interrupt_handler,
   ESP8266_get_PPS_TimeMarker,
-  ESP8266_Baro_setup
+  ESP8266_Baro_setup,
+  ESP8266_UATSerial_begin,
+  ESP8266_CC13XX_restart,
+  ESP8266_WDT_setup
 };
 
 #endif /* ESP8266 */

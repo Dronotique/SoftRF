@@ -1,6 +1,6 @@
 /*
  * Platform_ESP32.h
- * Copyright (C) 2018 Linar Yusupov
+ * Copyright (C) 2018-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  */
 #if defined(ESP32)
 
-#ifndef ESP32HELPER_H
-#define ESP32HELPER_H
+#ifndef PLATFORM_ESP32_H
+#define PLATFORM_ESP32_H
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -27,8 +27,12 @@
 #include <WiFiClient.h>
 #include <SPIFFS.h>
 
-#define SoftwareSerial HardwareSerial
-#define swSer Serial1
+/* Maximum of tracked flying objects is now SoC-specific constant */
+#define MAX_TRACKING_OBJECTS    8
+
+#define SoftwareSerial  HardwareSerial
+#define swSer           Serial1
+#define UATSerial       Serial2
 
 /* Adafruit_NeoPixel still has "flickering" issue of ESP32 caused by 1 ms scheduler */
 //#define USE_ADAFRUIT_NEO_LIBRARY
@@ -155,9 +159,17 @@ struct rst_info {
   uint32_t depc;
 };
 
+#define MakeFlashId(v,d)  ((v << 16) | d)
+
 /* Disable brownout detection (avoid unexpected reset on some boards) */
 #define ESP32_DISABLE_BROWNOUT_DETECTOR 0
 
-#endif /* ESP32HELPER_H */
+#define  NMEA_TCP_SERVICE
+
+//#define ESP32_CORE_DEVEL
+#define ESP32_CORE_1_0_1
+//#define ESP32_CORE_1_0_0
+
+#endif /* PLATFORM_ESP32_H */
 
 #endif /* ESP32 */

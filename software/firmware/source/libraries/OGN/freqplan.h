@@ -7,14 +7,15 @@
 
 enum
 {
-	RF_BAND_AUTO = 0,
-	RF_BAND_EU   = 1,	/* 868.4 MHz band */
-	RF_BAND_US   = 2,	/* 915 MHz band */
-	RF_BAND_AU   = 3,	/* 921 MHz band */
-	RF_BAND_NZ   = 4,	/* 869.250 MHz band */
-	RF_BAND_RU   = 5,	/* 868.8 MHz band */
-	RF_BAND_CN   = 6,	/* 470 MHz band */
-	RF_BAND_UK   = 7  /* 869.52 MHz band */
+  RF_BAND_AUTO = 0,
+  RF_BAND_EU   = 1, /* 868.4 MHz band */
+  RF_BAND_US   = 2, /* 915 MHz band */
+  RF_BAND_AU   = 3, /* 921 MHz band */
+  RF_BAND_NZ   = 4, /* 869.250 MHz band */
+  RF_BAND_RU   = 5, /* 868.8 MHz band */
+  RF_BAND_CN   = 6, /* 470 MHz band */
+  RF_BAND_UK   = 7, /* 869.52 MHz band */
+  RF_BAND_IN   = 8  /* 866.0 MHz band */
 };
 
 class FreqPlan
@@ -42,7 +43,7 @@ class FreqPlan
           { BaseFreq=869250000; ChanSepar=200000; Channels= 1; MaxTxPower = 10; } // New Zealand
           break;
         case RF_BAND_RU:
-          { BaseFreq=868800000; ChanSepar=200000; Channels= 1; MaxTxPower = 14; } // Russia
+          { BaseFreq=868800000; ChanSepar=200000; Channels= 1; MaxTxPower = 20; } // Russia
           break;
         case RF_BAND_CN:
           { BaseFreq=470100000; ChanSepar=200000; Channels= 1 /* 18 */; MaxTxPower = 17; } // China, 470-473.6 MHz
@@ -53,6 +54,9 @@ class FreqPlan
 #else
           { BaseFreq=869920000; ChanSepar=200000; Channels= 1; MaxTxPower = 27; } // Test PAW on NiceRF SV6X0
 #endif
+          break;
+        case RF_BAND_IN:
+          { BaseFreq=866000000; ChanSepar=200000; Channels= 1; MaxTxPower = 30; } // India
           break;
         case RF_BAND_EU:
         default:
@@ -67,10 +71,10 @@ class FreqPlan
    const char *getPlanName(void) { return getPlanName(Plan); }
 
    static const char *getPlanName(uint8_t Plan)
-   { static const char *Name[8] = { "Default", "Europe/Africa",
+   { static const char *Name[9] = { "Default", "Europe/Africa",
        "USA/Canada", "Australia/South America", "New Zealand",
-       "Russia", "China", "PilotAware (UK)" } ;
-     if(Plan>RF_BAND_UK) return 0;
+       "Russia", "China", "PilotAware (UK)", "India" } ;
+     if(Plan>RF_BAND_IN) return 0;
      return Name[Plan]; }
 
    uint8_t getChannel  (uint32_t Time, uint8_t Slot=0, uint8_t OGN=1) const // OGN-tracker or FLARM, UTC time, slot: 0 or 1

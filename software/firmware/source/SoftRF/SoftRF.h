@@ -1,6 +1,6 @@
 /*
  * SoftRF.h
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,27 +19,20 @@
 #ifndef SOFTRF_H
 #define SOFTRF_H
 
+#if defined(ARDUINO)
 #include <Arduino.h>
+#endif /* ARDUINO */
 
-#define SOFTRF_FIRMWARE_VERSION "1.0-rc5"
+#if defined(ENERGIA_ARCH_CC13XX)
+#include <TimeLib.h>
+#endif /* ENERGIA_ARCH_CC13XX */
 
-//#define TEST_PAW_ON_NICERF_SV610_FW466
+#if defined(RASPBERRY_PI)
+#include <raspi/raspi.h>
+#endif /* RASPBERRY_PI */
 
-#define LOGGER_IS_ENABLED 0
-
-#if LOGGER_IS_ENABLED
-#define StdOut  LogFile
-#else
-#define StdOut  Serial
-#endif /* LOGGER_IS_ENABLED */
-
-#define PKT_SIZE  24  /* LEGACY_PAYLOAD_SIZE */
-
-/* Max. paket's payload size for all supported RF protocols */
-#define MAX_PKT_SIZE  32 
-
-#define RRB_SIZE  10
-#define MAX_TRACKING_OBJECTS    8
+#define SOFTRF_FIRMWARE_VERSION "1.0-rc6"
+#define SOFTRF_UAT_IDENT  "SoftRF-UAT"
 
 #define ENTRY_EXPIRATION_TIME   10 /* seconds */
 #define LED_EXPIRATION_TIME     5 /* seconds */
@@ -75,8 +68,12 @@
 #define NMEA_UDP_PORT     10110
 #define NMEA_TCP_PORT     2000
 
+#if defined(PREMIUM_PACKAGE) && !defined(RASPBERRY_PI)
+#define ENABLE_AHRS
+#endif /* PREMIUM_PACKAGE */
+
 typedef struct UFO {
-    String    raw;
+    uint8_t   raw[34];
     time_t    timestamp;
 
     uint8_t   protocol;
@@ -116,6 +113,9 @@ typedef struct hardware_info {
     byte  gnss;
     byte  baro;
     byte  display;
+#if defined(ENABLE_AHRS)
+    byte  ahrs;
+#endif /* ENABLE_AHRS */
 } hardware_info_t;
 
 enum
@@ -123,10 +123,11 @@ enum
 	SOFTRF_MODE_NORMAL,
 	SOFTRF_MODE_WATCHOUT,
 	SOFTRF_MODE_BRIDGE,
-	SOFTRF_MODE_OGN,
+	SOFTRF_MODE_RELAY,
 	SOFTRF_MODE_TXRX_TEST,
 	SOFTRF_MODE_LOOPBACK,
-	SOFTRF_MODE_UAV
+	SOFTRF_MODE_UAV,
+	SOFTRF_MODE_RECEIVER
 };
 
 enum
@@ -134,20 +135,32 @@ enum
 	SOFTRF_MODEL_STANDALONE,
 	SOFTRF_MODEL_PRIME,
 	SOFTRF_MODEL_UAV,
-	SOFTRF_MODEL_PRIME_MK2
+	SOFTRF_MODEL_PRIME_MK2,
+	SOFTRF_MODEL_RASPBERRY,
+	SOFTRF_MODEL_UAT
 };
 
-extern void Misc_info(void);
 extern ufo_t ThisAircraft;
 extern hardware_info_t hw_info;
 extern const float txrx_test_positions[90][2] PROGMEM;
 
 #define TXRX_TEST_NUM_POSITIONS (sizeof(txrx_test_positions) / sizeof(float) / 2)
 #define TXRX_TEST_ALTITUDE    438.0
-#define TXRX_TEST_COURSE      0.0
+#define TXRX_TEST_COURSE      280.0
 #define TXRX_TEST_SPEED       50.0
+#define TXRX_TEST_VS          -300.0
 
 //#define ENABLE_TTN
 //#define ENABLE_BT_VOICE
+//#define TEST_PAW_ON_NICERF_SV610_FW466
+#define  DO_GDL90_FF_EXT
+
+#define LOGGER_IS_ENABLED 0
+
+#if LOGGER_IS_ENABLED
+#define StdOut  LogFile
+#else
+#define StdOut  Serial
+#endif /* LOGGER_IS_ENABLED */
 
 #endif /* SOFTRF_H */

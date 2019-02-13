@@ -1,6 +1,6 @@
 /*
  * Deprecated.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -261,4 +261,32 @@ char * dtostrf_workaround(double number, signed char width, unsigned char prec, 
   }
   return rval;
 }
+#endif
+
+#if 0
+
+void Misc_info()
+{
+  Serial.println("\r\n");
+  Serial.print(F("Chip ID: 0x"));
+  Serial.println(SoC->getChipId(), HEX);
+
+  uint32_t realSize = SoC->getFlashChipRealSize();
+  uint32_t ideSize = ESP.getFlashChipSize();
+  FlashMode_t ideMode = ESP.getFlashChipMode();
+
+  Serial.printf("Flash real id:   %08X\n", SoC->getFlashChipId());
+  Serial.printf("Flash real size: %u\n\n", realSize);
+
+  Serial.printf("Flash ide  size: %u\n", ideSize);
+  Serial.printf("Flash ide speed: %u\n", ESP.getFlashChipSpeed());
+  Serial.printf("Flash ide mode:  %s\n", (ideMode == FM_QIO ? "QIO" : ideMode == FM_QOUT ? "QOUT" : ideMode == FM_DIO ? "DIO" : ideMode == FM_DOUT ? "DOUT" : "UNKNOWN"));
+
+  if (ideSize != realSize) {
+    Serial.println(F("Flash Chip configuration wrong!\n"));
+  } else {
+    Serial.println(F("Flash Chip configuration ok.\n"));
+  }
+}
+
 #endif

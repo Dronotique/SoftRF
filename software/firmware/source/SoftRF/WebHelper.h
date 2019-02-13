@@ -1,6 +1,6 @@
 /*
  * WebHelper.h
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,10 @@
 #define WEBHELPER_H
 
 #include <TinyGPS++.h>
+
+#if defined(ARDUINO)
 #include <WiFiClient.h>
+#endif /* ARDUINO */
 
 #include "SoftRF.h"
 #include "EEPROMHelper.h"
@@ -32,13 +35,18 @@
 void Web_setup(void);
 void Web_loop(void);
 
+#if DEBUG
 void Hex2Bin(String, byte *);
-String Bin2Hex(byte *);
+#endif
 
 extern uint32_t tx_packets_counter, rx_packets_counter;
-extern byte TxBuffer[PKT_SIZE];
+//extern byte TxBuffer[PKT_SIZE];
 extern String TxDataTemplate;
+
+#if defined(ARDUINO)
 extern WiFiClient client;
+#endif /* ARDUINO */
+
 extern TinyGPSPlus gps;
 
 #endif /* WEBHELPER_H */

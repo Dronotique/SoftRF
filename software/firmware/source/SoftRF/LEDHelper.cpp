@@ -1,6 +1,6 @@
 /*
  * LEDHelper.cpp
- * Copyright (C) 2016-2018 Linar Yusupov
+ * Copyright (C) 2016-2019 Linar Yusupov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -123,9 +123,9 @@ static void LED_Clear_noflush() {
     }
 
     uni_setPixelColor(LED_STATUS_POWER,
-      Battery_voltage() > 2.3 ? LED_COLOR_MI_GREEN : LED_COLOR_MI_RED);
+      Battery_voltage() > Battery_threshold() ? LED_COLOR_MI_GREEN : LED_COLOR_MI_RED);
     uni_setPixelColor(LED_STATUS_SAT,
-      isValidFix() ? LED_COLOR_MI_GREEN : LED_COLOR_MI_RED);
+      isValidGNSSFix() ? LED_COLOR_MI_GREEN : LED_COLOR_MI_RED);
 }
 
 void LED_Clear() {
@@ -184,7 +184,7 @@ void LED_DisplayTraffic() {
 
 void LED_loop() {
   if (status_LED != SOC_UNUSED_PIN) {
-    if (Battery_voltage() > 3.5 ) {
+    if (Battery_voltage() > Battery_threshold() ) {
       if (digitalRead(status_LED)) {
         digitalWrite(status_LED, LOW);
       }
